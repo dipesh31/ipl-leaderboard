@@ -1,0 +1,48 @@
+# Maven target folder
+target/
+
+# Logs
+*.log
+
+# Excel files (test data)
+*.xlsx
+*.xls
+
+# IDE - IntelliJ
+.idea/
+*.iml
+
+# IDE - Eclipse
+.project
+.classpath
+.settings/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Selenium / WebDriver logs
+*.txt
+
+# Temporary files
+*.tmp
+*.bak
+
+# Test output
+test-output/
+
+# Screenshots (if you add later)
+screenshots/
+
+# Node (if ever used)
+node_modules/
+
+# Environment files
+.env
+
+# Mac system files
+.AppleDouble
+.LSOverride
