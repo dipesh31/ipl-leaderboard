@@ -2,16 +2,19 @@ package com.ipl.utils;
 
 import org.apache.poi.ss.usermodel.*;
 
-
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class ExcelReader {
     private String path;
+
+    // ✅ Column mapping (LOCKED)
+    private static final int PLAYER_COL = 0;
+    private static final int IPL_TEAM_COL = 1;
+    private static final int FANTASY_TEAM_COL = 2;
+    private static final int ROLE_COL = 3;
+    private static final int POINTS_COL = 4;
 
     public ExcelReader(String path) {
         this.path = path;
@@ -38,22 +41,29 @@ public class ExcelReader {
     }
 
     /**
-     * Writes ONLY player points to Sheet1 (Column E)
-     * Applies C/VC multiplier
+     * ✅ FIXED: Safe write (prevents IPL Team overwrite)
      */
     public void writePoints(String sheetName, String playerName, String rawPoints) throws Exception {
+
         FileInputStream fis = new FileInputStream(path);
         Workbook workbook = WorkbookFactory.create(fis);
         Sheet sheet = workbook.getSheet(sheetName);
         DataFormatter formatter = new DataFormatter();
 
-        for (int i = 1; i <= sheet.getLastRowNum(); i++) { // start from row 1 (skip header)
+        for (int i = 1; i <= sheet.getLastRowNum(); i++) {
             Row row = sheet.getRow(i);
             if (row == null) continue;
 
-            String nameInSheet = formatter.formatCellValue(row.getCell(0)).trim();
+            String nameInSheet = formatter.formatCellValue(row.getCell(PLAYER_COL)).trim();
 
             if (nameInSheet.equalsIgnoreCase(playerName.trim())) {
+
+                // ✅ Ensure ALL cells exist (prevents row corruption)
+                for (int c = 0; c <= POINTS_COL; c++) {
+                    if (row.getCell(c) == null) {
+                        row.createCell(c);
+                    }
+                }
 
                 double p = 0.0;
                 try {
@@ -62,7 +72,7 @@ public class ExcelReader {
                     p = 0.0;
                 }
 
-                String role = formatter.formatCellValue(row.getCell(3)).trim(); // Column D
+                String role = formatter.formatCellValue(row.getCell(ROLE_COL)).trim();
 
                 // Apply multiplier
                 if (role.equalsIgnoreCase("C")) {
@@ -71,12 +81,11 @@ public class ExcelReader {
                     p = p * 1.5;
                 }
 
-                Cell pointsCell = row.getCell(4); // Column E
-                if (pointsCell == null) {
-                    pointsCell = row.createCell(4);
-                }
+                // ✅ SAFELY overwrite ONLY points column
+                Cell pointsCell = row.getCell(POINTS_COL);
+                pointsCell.setBlank(); // remove any formula
+                pointsCell.setCellValue(p);
 
-                pointsCell.setCellValue(p); // ✅ ONLY player points written
                 break;
             }
         }
@@ -88,8 +97,7 @@ public class ExcelReader {
     }
 
     /**
-     * NEW METHOD:
-     * Calculates totals from Sheet1 and writes ONLY to Sheet2
+     * ✅ Unchanged logic + safe column usage
      */
     public void updateAllTeamTotals(String sourceSheet, String targetSheet) throws Exception {
 
@@ -101,13 +109,12 @@ public class ExcelReader {
 
         Map<String, Double> teamTotals = new HashMap<>();
 
-        // Step 1: Calculate totals from Sheet1 (UNCHANGED)
         for (int i = 1; i <= s1.getLastRowNum(); i++) {
             Row row = s1.getRow(i);
             if (row == null) continue;
 
-            String team = formatter.formatCellValue(row.getCell(2)).trim();
-            String pointsStr = formatter.formatCellValue(row.getCell(4)).trim();
+            String team = formatter.formatCellValue(row.getCell(FANTASY_TEAM_COL)).trim();
+            String pointsStr = formatter.formatCellValue(row.getCell(POINTS_COL)).trim();
 
             if (!team.isEmpty() && !pointsStr.isEmpty()) {
                 try {
@@ -117,20 +124,18 @@ public class ExcelReader {
             }
         }
 
-        // 🔥 NEW: Sort teams by points DESC
+        // Sorting
         List<Map.Entry<String, Double>> sortedList = new ArrayList<>(teamTotals.entrySet());
         sortedList.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
 
-        // Step 2: Clear Sheet2 (UNCHANGED)
+        // Clear Sheet2
         int lastRow = s2.getLastRowNum();
         for (int i = lastRow; i > 0; i--) {
             Row row = s2.getRow(i);
-            if (row != null) {
-                s2.removeRow(row);
-            }
+            if (row != null) s2.removeRow(row);
         }
 
-        // 🔥 NEW: Add Rank in header
+        // Header
         Row header = s2.getRow(0);
         if (header == null) header = s2.createRow(0);
 
@@ -138,16 +143,14 @@ public class ExcelReader {
         header.createCell(1).setCellValue("Team");
         header.createCell(2).setCellValue("Total");
 
-        // 🔥 NEW: Write sorted data with rank
         int rowIndex = 1;
         int rank = 1;
 
         for (Map.Entry<String, Double> entry : sortedList) {
             Row row = s2.createRow(rowIndex++);
-
-            row.createCell(0).setCellValue(rank++);           // Rank
-            row.createCell(1).setCellValue(entry.getKey());   // Team
-            row.createCell(2).setCellValue(entry.getValue()); // Points
+            row.createCell(0).setCellValue(rank++);
+            row.createCell(1).setCellValue(entry.getKey());
+            row.createCell(2).setCellValue(entry.getValue());
         }
 
         fis.close();
@@ -155,25 +158,25 @@ public class ExcelReader {
         workbook.write(fos);
         fos.close();
     }
-    
+
     public void clearPointsColumn(String sheetName) throws Exception {
-	    FileInputStream fis = new FileInputStream(path);
-	    Workbook workbook = WorkbookFactory.create(fis);
-	    Sheet sheet = workbook.getSheet(sheetName);
+        FileInputStream fis = new FileInputStream(path);
+        Workbook workbook = WorkbookFactory.create(fis);
+        Sheet sheet = workbook.getSheet(sheetName);
 
-	    for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-	        Row row = sheet.getRow(i);
-	        if (row != null) {
-	            Cell cell = row.getCell(4); // Column E
-	            if (cell != null) {
-	                cell.setBlank(); // 🔥 clears old values
-	            }
-	        }
-	    }
+        for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+            Row row = sheet.getRow(i);
+            if (row != null) {
+                Cell cell = row.getCell(POINTS_COL);
+                if (cell != null) {
+                    cell.setBlank();
+                }
+            }
+        }
 
-	    fis.close();
-	    FileOutputStream fos = new FileOutputStream(path);
-	    workbook.write(fos);
-	    fos.close();
-	}
+        fis.close();
+        FileOutputStream fos = new FileOutputStream(path);
+        workbook.write(fos);
+        fos.close();
+    }
 }
